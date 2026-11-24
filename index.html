@@ -1,0 +1,228 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <title>Listing Check for Etsy</title>
+  <style>
+    :root {
+      color-scheme: light;
+      font: 100%/1.55 system-ui, sans-serif;
+      color: #27251f;
+      background: #f7f5ee;
+      --line: #dad6ca;
+      --muted: #615c51;
+      --accent: #2e5947;
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; }
+    main { max-width: 48rem; margin: auto; padding: clamp(1.25rem, 5vw, 3.5rem) 1rem; }
+    h1, h2, p { margin: 0; }
+    h1 {
+      font: 700 clamp(2.2rem, 6vw, 3.7rem)/1.06 Georgia, serif;
+      letter-spacing: -.04em;
+    }
+    .intro, footer { color: var(--muted); }
+    .intro { margin-top: .65rem; }
+    form, .results {
+      background: #fffdf8;
+      border: 1px solid var(--line);
+      border-radius: 1rem;
+      padding: clamp(1rem, 4vw, 1.75rem);
+      margin-top: 1.4rem;
+    }
+    .field + .field { margin-top: 1.25rem; }
+    .field-header, .actions { display: flex; gap: .6rem 1rem; align-items: baseline; flex-wrap: wrap; }
+    .field-header { justify-content: space-between; }
+    label { font-weight: 700; }
+    .count, .help { color: var(--muted); font-size: .9rem; }
+    .count { font-variant-numeric: tabular-nums; }
+    .count.over, .errors { color: #932b28; }
+    textarea {
+      display: block;
+      width: 100%;
+      padding: .7rem .8rem;
+      margin-top: .35rem;
+      border: 1px solid #918a7c;
+      border-radius: .55rem;
+      background: #fff;
+      color: inherit;
+      font: inherit;
+      resize: vertical;
+    }
+    .help { margin-top: .3rem; }
+    .actions { margin-top: 1.2rem; align-items: center; }
+    button {
+      min-height: 2.75rem;
+      border: 1px solid var(--accent);
+      border-radius: .5rem;
+      padding: .5rem .9rem;
+      background: var(--accent);
+      color: #fff;
+      font: inherit;
+      font-weight: 650;
+      cursor: pointer;
+    }
+    button:hover { filter: brightness(.9); }
+    button.secondary { background: transparent; color: var(--accent); }
+    :focus-visible { outline: 3px solid #a34c25; outline-offset: 3px; }
+    .results h2 { font-size: 1.15rem; }
+    .results ul { margin: .65rem 0 0; padding-left: 1.3rem; overflow-wrap: anywhere; }
+    .results li + li { margin-top: .3rem; }
+    .tips { color: #654b17; }
+    footer { margin-top: 1.2rem; font-size: .9rem; }
+    a { color: var(--accent); }
+  </style>
+</head>
+<body>
+  <main>
+    <header>
+      <h1>Listing Check for Etsy</h1>
+      <p class="intro">Check a draft title and tags before you paste them into Etsy. Everything runs in your browser.</p>
+    </header>
+    <form id="listing-form">
+      <div class="field">
+        <div class="field-header">
+          <label for="title">Listing title</label>
+          <span class="count" id="title-count">0 / 140 characters</span>
+        </div>
+        <textarea id="title" rows="2" aria-describedby="title-count"></textarea>
+      </div>
+      <div class="field">
+        <div class="field-header">
+          <label for="tags">Tags</label>
+          <span class="count" id="tag-count">0 / 13 tags</span>
+        </div>
+        <textarea id="tags" rows="6" aria-describedby="tag-help tag-count"></textarea>
+        <p class="help" id="tag-help">Separate tags with commas or new lines. Each tag can have up to 20 characters.</p>
+      </div>
+      <div class="actions">
+        <button type="submit">Check listing</button>
+        <button class="secondary" type="button" id="example">Try an example</button>
+      </div>
+    </form>
+    <div id="feedback" aria-live="polite" aria-atomic="true"></div>
+    <footer>
+      <p>Independent tool. See Etsy’s
+        <a href="https://help.etsy.com/hc/en-us/articles/115015628707-How-to-Create-a-Listing">title guidance</a>
+        and <a href="https://help.etsy.com/hc/en-gb/articles/360000336307-How-to-Use-Tags-to-Get-Found-in-Search">tag rules</a>.
+      </p>
+    </footer>
+  </main>
+  <script>
+    const MAX_TITLE = 140;
+    const MAX_TAGS = 13;
+    const MAX_TAG_LENGTH = 20;
+    const MAX_RECOMMENDED_WORDS = 14;
+    const ALLOWED_TAG = /^[a-z0-9ÀÁÂÃÄÅÆÇÈÉÊËÌÍÎÏÑÒÓÔÕÖØŒÙÚÛÜÝÞßàáâãäåæçèéêëìíîïñòóôõöøœùúûüýþÿ '’-]+$/i;
+
+    function characterCount(value) {
+      return Array.from(value.normalize('NFC')).length;
+    }
+
+    function parseTags(value) {
+      return value.split(/[,\r\n]+/).map(tag => tag.trim()).filter(Boolean);
+    }
+
+    function checkListing(title, tags) {
+      const errors = [];
+      const tips = [];
+      const cleanTitle = title.trim();
+
+      if (!cleanTitle) {
+        errors.push('Enter a listing title.');
+      } else if (characterCount(cleanTitle) > MAX_TITLE) {
+        errors.push(`Shorten the title to ${MAX_TITLE} characters or fewer.`);
+      }
+      if (cleanTitle.split(/\s+/).length > MAX_RECOMMENDED_WORDS) {
+        tips.push('Consider using fewer than 15 words in your title.');
+      }
+      if (tags.length > MAX_TAGS) {
+        errors.push(`Remove ${tags.length - MAX_TAGS} tag(s) to stay within the ${MAX_TAGS}-tag limit.`);
+      }
+      if (tags.length === 0) {
+        tips.push('Add tags to describe what shoppers might search for.');
+      }
+
+      const seen = new Set();
+      tags.forEach((rawTag, index) => {
+        const tag = rawTag.normalize('NFC');
+        const location = `Tag ${index + 1} (“${rawTag}”)`;
+        if (characterCount(tag) > MAX_TAG_LENGTH) {
+          errors.push(`${location} exceeds ${MAX_TAG_LENGTH} characters.`);
+        }
+        if (!ALLOWED_TAG.test(tag) || /^['’-]/.test(tag)) {
+          errors.push(`${location} contains unsupported characters or starts with punctuation.`);
+        }
+
+        const normalized = tag.toLowerCase().replace(/ +/g, ' ').replace(/’/g, "'");
+        if (seen.has(normalized)) {
+          tips.push(`${location} repeats an earlier tag.`);
+        }
+        seen.add(normalized);
+      });
+      return { errors, tips };
+    }
+
+    const form = document.querySelector('#listing-form');
+    const titleInput = document.querySelector('#title');
+    const tagInput = document.querySelector('#tags');
+    const titleCount = document.querySelector('#title-count');
+    const tagCount = document.querySelector('#tag-count');
+    const feedback = document.querySelector('#feedback');
+
+    function updateCounts() {
+      const titleLength = characterCount(titleInput.value.trim());
+      const tagTotal = parseTags(tagInput.value).length;
+      titleCount.textContent = `${titleLength} / ${MAX_TITLE} characters`;
+      titleCount.classList.toggle('over', titleLength > MAX_TITLE);
+      tagCount.textContent = `${tagTotal} / ${MAX_TAGS} tags`;
+      tagCount.classList.toggle('over', tagTotal > MAX_TAGS);
+    }
+
+    function appendFindings(panel, messages, className, label) {
+      if (messages.length === 0) return;
+      const list = document.createElement('ul');
+      list.className = className;
+      list.setAttribute('aria-label', label);
+      for (const message of messages) {
+        const item = document.createElement('li');
+        item.textContent = message;
+        list.append(item);
+      }
+      panel.append(list);
+    }
+
+    function showResults() {
+      const { errors, tips } = checkListing(titleInput.value, parseTags(tagInput.value));
+      const panel = document.createElement('section');
+      panel.className = 'results';
+      const heading = document.createElement('h2');
+      heading.textContent = errors.length
+        ? 'Review these items before publishing'
+        : 'No title or tag limit issues found';
+      panel.append(heading);
+      appendFindings(panel, errors, 'errors', 'Issues');
+      appendFindings(panel, tips, 'tips', 'Suggestions');
+      feedback.replaceChildren(panel);
+    }
+
+    form.addEventListener('input', () => {
+      updateCounts();
+      feedback.replaceChildren();
+    });
+    form.addEventListener('submit', event => {
+      event.preventDefault();
+      showResults();
+    });
+    document.querySelector('#example').addEventListener('click', () => {
+      titleInput.value = 'Autumn Phone Case with Orange Leaf Pattern';
+      tagInput.value = 'fall phone case, autumn leaves, orange leaf cover, Fall Phone Case, #fall';
+      updateCounts();
+      showResults();
+    });
+    updateCounts();
+  </script>
+</body>
+</html>
